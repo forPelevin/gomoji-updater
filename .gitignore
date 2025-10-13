@@ -49,3 +49,6 @@ bin/
 .env
 .env.local
 .env.*.local
+
+# Generated data file
+data.go
