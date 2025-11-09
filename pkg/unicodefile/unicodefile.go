@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -29,23 +30,25 @@ func (o *Provider) AllEmojis(ctx context.Context) ([]gomoji.Emoji, error) {
 		return nil, fmt.Errorf("get emoji-zwj-sequences: %w", err)
 	}
 
-	testEmojis, err := o.allEmojis(ctx, "emoji-test")
-	if err != nil {
-		return nil, fmt.Errorf("get emoji-test: %w", err)
-	}
-
 	allEmojis := append(sequences, zwjSequences...)
-	allEmojis = append(allEmojis, testEmojis...)
 
 	return allEmojis, nil
 }
 
 func (o *Provider) allEmojis(_ context.Context, name string) ([]gomoji.Emoji, error) {
+	fmt.Printf("Starting download and processing for: %s\n", name)
 	resp, err := http.Get(fmt.Sprintf("https://unicode.org/Public/emoji/latest/%s.txt", name))
 	if err != nil {
+		fmt.Printf("Error downloading %s: %v\n", name, err)
 		return nil, fmt.Errorf("http get: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
+		fmt.Printf("Error reading body for %s: %v\n", name, err)
+		return nil, fmt.Errorf("http status %d for %s: %s", resp.StatusCode, name, string(bodyBytes))
+	}
 
 	var (
 		emojis   []gomoji.Emoji
@@ -55,6 +58,7 @@ func (o *Provider) allEmojis(_ context.Context, name string) ([]gomoji.Emoji, er
 
 	sc := bufio.NewScanner(resp.Body)
 	for sc.Scan() {
+		fmt.Printf("Processing row: %s (file: %s)\n", sc.Text(), name)
 		row := strings.TrimSpace(sc.Text())
 		if row == "" {
 			continue
@@ -73,8 +77,20 @@ func (o *Provider) allEmojis(_ context.Context, name string) ([]gomoji.Emoji, er
 			continue
 		}
 
-		codePoint := strings.TrimSpace(before(row, ";"))
-		row = strings.Split(row, ";")[1]
+		// Skip lines without semicolon separator
+		if !strings.Contains(row, ";") {
+			fmt.Printf("Skipping row without semicolon: %q\n", row)
+			continue
+		}
+
+		parts := strings.Split(row, ";")
+		if len(parts) < 2 {
+			fmt.Printf("Skipping row with less than 2 parts after split on semicolon: %q\n", row)
+			continue
+		}
+
+		codePoint := strings.TrimSpace(parts[0])
+		row = parts[1]
 		status := strings.TrimSpace(before(row, "#"))
 		if status == "component" {
 			continue

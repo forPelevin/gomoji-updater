@@ -1,2 +1,2 @@
 generate:
-	go run ./cmd/updater/main.go
+	go run -race ./cmd/updater/main.go

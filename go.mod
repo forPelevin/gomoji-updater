@@ -1,6 +1,6 @@
 module github.com/forPelevin/gomoji-updater
 
-go 1.19
+go 1.24.0
 
 require github.com/forPelevin/gomoji v1.4.0
 
